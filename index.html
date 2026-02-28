@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deloitte Maturity Assessment</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Open Sans', Arial, sans-serif; background: #000; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        #app-container { background: #111; width: 90%; max-width: 450px; padding: 35px; border-radius: 4px; border-top: 6px solid #86bc25; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+        .hidden { display: none !important; }
+        
+        .logo-box { margin-bottom: 25px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.4rem; letter-spacing: -1px; }
+        .logo-box img { max-height: 100%; width: auto; }
+
+        input { width: 100%; padding: 14px; margin: 10px 0; background: #222; border: 1px solid #444; color: #fff; border-radius: 2px; }
+        button { width: 100%; padding: 18px; border: none; background: #86bc25; color: #000; font-weight: bold; cursor: pointer; margin-top: 25px; text-transform: uppercase; letter-spacing: 1px; }
+        
+        #q-counter { font-size: 0.7rem; color: #666; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 2px; }
+        .cat-tag { color: #86bc25; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; border: 1px solid #333; padding: 4px 14px; border-radius: 20px; display: inline-block; margin-bottom: 15px; }
+        .q-text { font-size: 1.2rem; line-height: 1.4; margin: 20px 0; min-height: 90px; font-weight: 300; }
+        
+        .score-display { font-size: 4rem; font-weight: bold; color: #86bc25; margin: 5px 0; }
+        .maturity-badge { background: #86bc25; color: #000; padding: 6px 18px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; display: inline-block; margin-bottom: 15px; }
+        .trend-card { background: #0a0a0a; padding: 18px; border-radius: 4px; border-left: 4px solid #86bc25; text-align: left; margin-top: 20px; font-size: 0.85rem; line-height: 1.7; }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <div class="logo-box">
+        <img src="images/logo2.png" alt="Deloitte." onerror="this.style.display='none'; this.parentElement.innerText='Deloitte.'">
+    </div>
+
+    <div id="reg-screen">
+        <h2 style="margin-bottom:30px; font-weight:300;">Cyber Maturity <br><strong>Assessment</strong></h2>
+        <input type="text" id="reg-name" placeholder="Full Name">
+        <input type="text" id="reg-company" placeholder="Company">
+        <input type="email" id="reg-email" placeholder="Email Address">
+        <button onclick="startApp()">Start Assessment</button>
+    </div>
+
+    <div id="quiz-screen" class="hidden">
+        <div id="q-counter">Question 1 of 10</div>
+        <div id="cat-display" class="cat-tag">Category</div>
+        <div id="q-display" class="q-text">Loading...</div>
+        
+        <div class="score-display" id="val-display">3</div>
+        <input type="range" id="m-slider" min="1" max="5" value="3" style="width:100%; accent-color:#86bc25;" oninput="document.getElementById('val-display').innerText=this.value">
+        <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:#444; margin-top:5px;"><span>INITIAL</span><span>OPTIMIZED</span></div>
+        
+        <button onclick="handleNext()">Next Step</button>
+    </div>
+
+    <div id="result-screen" class="hidden">
+        <div id="m-badge" class="maturity-badge">TIER</div>
+        <h1 id="m-score" style="margin:0; font-size: 3.5rem; letter-spacing:-2px;">0.0</h1>
+        <p style="color:#666; margin-top:0; font-size:0.8rem; text-transform:uppercase; letter-spacing:1px;">Global Maturity Index</p>
+        
+        <canvas id="maturityChart" style="margin:20px 0;"></canvas>
+        
+        <div id="trend-list" class="trend-card">Calculating benchmark comparisons...</div>
+        <button onclick="location.reload()" style="background:#222; color:#fff;">Restart Assessment</button>
+    </div>
+</div>
+
+<script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzd63iRBiIqlkEuFevIsQXy73oYLvJX2JhSwwrsLfCP-hkAWfdZ862eGa1CMD9YBnB3A/exec";
+    const tiers = ["Initial", "Developing", "Defined", "Managed", "Optimized"];
+    let questions = [], currentIdx = 0, userScores = [], userDetails = {};
+
+    async function startApp() {
+        const name = document.getElementById('reg-name').value;
+        if(!name) return alert("Please enter your name.");
+        userDetails = { name, company: document.getElementById('reg-company').value, email: document.getElementById('reg-email').value };
+        
+        try {
+            const resp = await fetch(`${SCRIPT_URL}?get=questions`, { redirect: 'follow' });
+            questions = await resp.json();
+            document.getElementById('reg-screen').classList.add('hidden');
+            document.getElementById('quiz-screen').classList.remove('hidden');
+            showQ();
+        } catch(e) { alert("Connectivity error. Please check your internet."); }
+    }
+
+    function showQ() {
+        const q = questions[currentIdx];
+        document.getElementById('q-counter').innerText = `Question ${currentIdx + 1} of ${questions.length}`;
+        document.getElementById('cat-display').innerText = q.category;
+        document.getElementById('q-display').innerText = q.text;
+        document.getElementById('m-slider').value = 3;
+        document.getElementById('val-display').innerText = 3;
+    }
+
+    async function handleNext() {
+        userScores.push({ 
+            category: questions[currentIdx].category, 
+            sub: questions[currentIdx].sub, 
+            score: parseInt(document.getElementById('m-slider').value) 
+        });
+
+        if(currentIdx < questions.length - 1) {
+            currentIdx++;
+            showQ();
+        } else {
+            submit();
+        }
+    }
+
+    async function submit() {
+        document.getElementById('quiz-screen').innerHTML = "<h3 style='color:#86bc25; margin-top:40px;'>Syncing your results...</h3>";
+        const avg = (userScores.reduce((a, b) => a + b.score, 0) / userScores.length);
+        
+        // POST Data
+        fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ ...userDetails, scores: userScores, totalScore: avg.toFixed(1) }) });
+        
+        setTimeout(async () => {
+            const resp = await fetch(SCRIPT_URL, { redirect: 'follow' });
+            const globalData = await resp.json();
+            showResults(userScores, globalData);
+        }, 1500);
+    }
+
+    function showResults(myScores, globalData) {
+        document.getElementById('quiz-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        
+        const avg = (myScores.reduce((a, b) => a + b.score, 0) / myScores.length);
+        document.getElementById('m-score').innerText = avg.toFixed(1);
+        document.getElementById('m-badge').innerText = tiers[Math.min(4, Math.floor(avg - 0.1))].toUpperCase();
+        
+        const cats = [...new Set(myScores.map(s => s.category))];
+        const myAvgs = cats.map(c => {
+            const f = myScores.filter(s => s.category === c);
+            return f.reduce((a, b) => a + b.score, 0) / f.length;
+        });
+
+        let trendHtml = "<strong>Benchmark Analysis:</strong><br>";
+        cats.forEach((cat, i) => {
+            let gSums = [];
+            globalData.forEach(e => {
+                const cS = e.scores.filter(s => s.category === cat);
+                if(cS.length > 0) gSums.push(cS.reduce((a, b) => a + b.score, 0) / cS.length);
+            });
+            const gAvg = gSums.length > 0 ? (gSums.reduce((a, b) => a + b, 0) / gSums.length) : myAvgs[i];
+            const diff = ((myAvgs[i] - gAvg) / (gAvg || 1)) * 100;
+            trendHtml += `• ${cat}: <span style="color:${diff >= 0 ? '#86bc25' : '#ff4d4d'}">${Math.abs(diff.toFixed(0))}% ${diff >= 0 ? 'above' : 'below'}</span> peers<br>`;
+        });
+        document.getElementById('trend-list').innerHTML = trendHtml;
+
+        new Chart(document.getElementById('maturityChart'), {
+            type: 'radar',
+            data: {
+                labels: cats,
+                datasets: [{ label: 'You', data: myAvgs, backgroundColor: 'rgba(134, 188, 37, 0.2)', borderColor: '#86bc25', borderWidth: 2 }]
+            },
+            options: { scales: { r: { min: 0, max: 5, ticks: { display: false }, grid: { color: '#333' } } }, plugins: { legend: { display: false } } }
+        });
+    }
+</script>
+</body>
+</html>

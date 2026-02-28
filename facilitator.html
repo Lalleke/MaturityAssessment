@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><title>Facilitator Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Open Sans', sans-serif; background: #000; color: #fff; display: flex; flex-direction: column; height: 100vh; margin: 0; }
+        nav { background: #1a1a1a; padding: 10px 20px; display: flex; gap: 20px; border-bottom: 1px solid #333; }
+        nav a { color: #888; text-decoration: none; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; }
+        nav a.active { color: #86bc25; border-bottom: 2px solid #86bc25; padding-bottom: 5px; }
+        
+        #main { display: flex; flex: 1; overflow: hidden; }
+        #sidebar { width: 320px; background: #111; border-right: 1px solid #333; overflow-y: auto; }
+        .u-card { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .u-card.active { border-left: 4px solid #86bc25; background: #222; }
+        .u-score { background: #333; padding: 4px 8px; border-radius: 4px; font-weight: bold; color: #86bc25; font-size: 0.8rem; }
+        
+        #content { flex: 1; padding: 40px; overflow-y: auto; }
+        .badge { background: #86bc25; color: #000; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.8rem; }
+        .stat-card { background: #111; border: 1px solid #333; padding: 15px; border-top: 3px solid #86bc25; text-align: center; }
+        .pos { color: #86bc25; } .neg { color: #ff4d4d; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        td, th { padding: 12px; border-bottom: 1px solid #222; text-align: left; }
+        .q-row { background: #1a1a1a; display: none; color: #888; font-style: italic; }
+        .expanded + .q-row { display: table-row; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="facilitator.html" class="active">Facilitator Dashboard</a>
+    <a href="manager.html">Question Manager</a>
+</nav>
+
+<div id="main">
+    <div id="sidebar">
+        <div style="padding:20px; background:#222; color:#86bc25; font-weight:bold; font-size:0.7rem; letter-spacing:1px;">SUBMISSIONS</div>
+        <div id="list"></div>
+    </div>
+    <div id="content">
+        <div id="view" class="hidden">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div><h1 id="v-name" style="margin:0;"></h1><p id="v-meta" style="color:#666;"></p></div>
+                <div id="v-badge" class="badge"></div>
+            </div>
+            <div id="summary" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin: 20px 0;"></div>
+            <div style="display:flex; gap:30px; flex-wrap: wrap;">
+                <div style="width:350px;"><canvas id="fChart"></canvas></div>
+                <div style="flex:1; min-width: 400px;">
+                    <table>
+                        <thead><tr><th>Challenge</th><th>Focus</th><th>Score</th><th>Benchmark</th></tr></thead>
+                        <tbody id="v-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzd63iRBiIqlkEuFevIsQXy73oYLvJX2JhSwwrsLfCP-hkAWfdZ862eGa1CMD9YBnB3A/exec";
+    const tiers = ["Initial", "Developing", "Defined", "Managed", "Optimized"];
+    let subs = [], quests = [], chart = null;
+
+    async function load() {
+        try {
+            const qR = await fetch(`${SCRIPT_URL}?get=questions`, { redirect: 'follow' });
+            quests = await qR.json();
+            const sR = await fetch(SCRIPT_URL, { redirect: 'follow' });
+            subs = await sR.json();
+            document.getElementById('list').innerHTML = subs.slice().reverse().map((s, i) => {
+                const idx = subs.length - 1 - i;
+                return `<div class="u-card" onclick="viewU(${idx}, this)">
+                    <div><strong>${s.name}</strong><br><small style="color:#666">${s.company}</small></div>
+                    <div class="u-score">${parseFloat(s.total).toFixed(1)}</div>
+                </div>`;
+            }).join('');
+        } catch(e) { document.getElementById('list').innerText = "Sync Error."; }
+    }
+
+    function viewU(idx, el) {
+        document.querySelectorAll('.u-card').forEach(c => c.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('view').classList.remove('hidden');
+        const u = subs[idx];
+        document.getElementById('v-name').innerText = u.name;
+        document.getElementById('v-meta').innerText = `${u.company} | ${u.email}`;
+        
+        const avgVal = parseFloat(u.total);
+        document.getElementById('v-badge').innerText = tiers[Math.min(4, Math.floor(avgVal - 0.1))].toUpperCase();
+
+        const cats = [...new Set(quests.map(q => q.category))];
+        const stats = cats.map(cat => {
+            const userScores = u.scores.filter(s => s.category === cat);
+            const uAvg = (userScores.reduce((a, b) => a + b.score, 0) / userScores.length) || 0;
+            let gS = []; subs.forEach(e => {
+                const cS = e.scores.filter(s => s.category === cat);
+                if(cS.length > 0) gS.push(cS.reduce((a, b) => a + b.score, 0) / cS.length);
+            });
+            const gAvg = gS.length > 0 ? (gS.reduce((a, b) => a + b, 0) / gS.length) : uAvg;
+            return { cat, uAvg, gAvg, diff: gAvg === 0 ? 0 : ((uAvg - gAvg) / gAvg) * 100 };
+        });
+
+        document.getElementById('summary').innerHTML = stats.map(s => `
+            <div class="stat-card">
+                <small style="color:#888; text-transform:uppercase; font-size:0.6rem;">${s.cat}</small>
+                <div class="${s.diff >= 0 ? 'pos' : 'neg'}" style="font-weight:bold; font-size:1.1rem;">${s.diff >= 0 ? '+' : ''}${s.diff.toFixed(0)}%</div>
+            </div>`).join('');
+        
+        document.getElementById('v-body').innerHTML = u.scores.map(s => {
+            const q = quests.find(q => q.sub === s.sub) || { text: "..." };
+            const diff = stats.find(st => st.cat === s.category).diff;
+            return `<tr onclick="this.classList.toggle('expanded')" style="cursor:pointer">
+                    <td>${s.category}</td><td><strong>${s.sub}</strong></td><td>${s.score}</td>
+                    <td class="${diff >= 0 ? 'pos' : 'neg'}">${diff >= 0 ? '▲' : '▼'} ${Math.abs(diff.toFixed(0))}%</td></tr>
+                    <tr class="q-row"><td colspan="4">Question: ${q.text}</td></tr>`;
+        }).join('');
+
+        if(chart) chart.destroy();
+        chart = new Chart(document.getElementById('fChart'), {
+            type: 'radar',
+            data: { 
+                labels: cats, 
+                datasets: [
+                    { label: 'Client', data: stats.map(s => s.uAvg), borderColor: '#86bc25', backgroundColor: 'rgba(134, 188, 37, 0.2)', borderWidth: 3 },
+                    { label: 'Industry Avg', data: stats.map(s => s.gAvg), borderColor: '#fff', borderDash: [5, 5], fill: false, pointRadius: 0 }
+                ]
+            },
+            options: { scales: { r: { min: 0, max: 5, ticks: { display: false }, grid: { color: '#333' } } }, plugins: { legend: { display: false } } }
+        });
+    }
+    load();
+</script>
+</body>
+</html>

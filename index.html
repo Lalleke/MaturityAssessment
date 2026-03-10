@@ -20,7 +20,6 @@
         input[type="text"] { width: 100%; padding: 14px; margin: 10px 0; background: #1a1a1a; border: 1px solid #333; color: #fff; box-sizing: border-box; }
         input[type="range"] { width: 100%; accent-color: var(--deloitte-green); margin: 20px 0; cursor: pointer; }
         
-        /* Hierarchical List Styling */
         .challenge-group { text-align: left; margin-bottom: 25px; border-bottom: 1px solid #222; padding-bottom: 10px; }
         .challenge-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
         .challenge-title { font-weight: 700; color: var(--deloitte-green); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.5px;}
@@ -29,14 +28,9 @@
         .insight-btn:hover { background: var(--deloitte-green); color: #000; }
         .skip-link { font-size: 0.8rem; color: #555; text-decoration: underline; cursor: pointer; margin-top: 20px; display: block; }
 
-        /* Carousel Modal Styling (Hardened) */
         #modal { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.98); z-index:9999; display:none; flex-direction:column; justify-content:center; align-items:center; box-sizing: border-box; padding: 20px; }
-        
-        /* Image wrapper forces aspects and non-overlap */
         .carousel-container { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 900px; background: #111; border: 1px solid #222; padding: 10px; box-sizing: border-box; }
         #modal-img { max-width:100%; max-height:75vh; border: 1px solid #333; display: block; }
-        
-        /* Specific control bar below the image */
         .carousel-controls { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 15px 0 5px 0; border-top: 1px solid #222; margin-top: 10px; box-sizing: border-box;}
         .carousel-btn { background: #222; color: var(--deloitte-green); border: 1px solid #333; width: auto; padding: 8px 20px; font-size: 0.7rem; margin: 0; cursor: pointer; text-transform: uppercase; font-weight: bold; }
         .carousel-btn:hover { background: #333; }
@@ -48,7 +42,6 @@
 <div id="modal">
     <div class="carousel-container">
         <img id="modal-img" src="">
-        
         <div class="carousel-controls">
             <button class="carousel-btn" onclick="changeSlide(-1)">PREV</button>
             <div id="slide-info" class="carousel-counter">1/1</div>
@@ -97,8 +90,6 @@
 <script>
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzd63iRBiIqlkEuFevIsQXy73oYLvJX2JhSwwrsLfCP-hkAWfdZ862eGa1CMD9YBnB3A/exec";
     let questions = [], currentIdx = 0, answers = [];
-    
-    // Carousel State
     let currentSlides = [], currentSlideIdx = 0;
 
     async function initQuiz() {
@@ -135,7 +126,6 @@
         const total = (answers.reduce((a, b) => a + b.score, 0) / answers.length).toFixed(1);
         const name = isAnon ? "Anonymous" : document.getElementById('reg-name').value;
         
-        // Background Save
         fetch(SCRIPT_URL, {
             method: 'POST', mode: 'no-cors',
             body: JSON.stringify({ name, email: document.getElementById('reg-email').value, company: document.getElementById('reg-company').value, details: answers, total })
@@ -149,7 +139,6 @@
     async function renderResults(total) {
         document.getElementById('res-total').innerText = total;
         
-        // Radar Chart
         const catAvgs = {};
         const categories = [...new Set(answers.map(a => a.category))];
         categories.forEach(c => {
@@ -160,13 +149,29 @@
         new Chart(document.getElementById('radarChart'), {
             type: 'radar',
             data: {
-                labels: Object.keys(catAvgs),
+                // FIXED: Slices at the colon to show only "Market Challenge X" on the chart
+                labels: Object.keys(catAvgs).map(label => label.split(':')[0]), 
                 datasets: [{ data: Object.values(catAvgs), borderColor: '#86bc25', backgroundColor: 'rgba(134, 188, 37, 0.2)', borderWidth: 2, pointRadius: 0 }]
             },
-            options: { scales: { r: { min: 0, max: 5, ticks: { display: false }, grid: { color: '#333' }, angleLines: { color: '#333' } } }, plugins: { legend: { display: false } }, maintainAspectRatio: false }
+            options: { 
+                scales: { 
+                    r: { 
+                        min: 0, max: 5, 
+                        ticks: { display: false }, 
+                        grid: { color: '#333' }, 
+                        angleLines: { color: '#333' },
+                        pointLabels: {
+                            color: '#888',
+                            font: { size: 10 },
+                            padding: 10 // Pushes labels slightly away from the graph
+                        }
+                    } 
+                }, 
+                plugins: { legend: { display: false } }, 
+                maintainAspectRatio: false 
+            }
         });
 
-        // Hierarchical Result List with Carousel Support
         let listHtml = "";
         for (let cat of categories) {
             const catSafe = cat.replace(/\s+/g, '');
@@ -197,14 +202,13 @@
         document.getElementById('res-list').innerHTML = listHtml;
     }
 
-    // Helper: Checks which slides (_1, _2, _3...) exist for an ID
     async function findExistingSlides(id) {
         let slides = [];
-        for (let i = 1; i <= 5; i++) { // Limit check to 5 slides max per topic
+        for (let i = 1; i <= 5; i++) {
             const path = `slides/${id}_${i}.png`;
             const exists = await checkImage(path);
             if (exists) slides.push(path);
-            else break; // Stop checking when a slide is missing (e.g., _2 fails means only _1 exists)
+            else break;
         }
         return slides;
     }
@@ -218,7 +222,6 @@
         });
     }
 
-    // Carousel Logic
     async function openCarousel(id) {
         currentSlides = await findExistingSlides(id);
         if (currentSlides.length === 0) return;
@@ -234,7 +237,6 @@
 
     function changeSlide(direction) {
         currentSlideIdx += direction;
-        // Basic circular loop
         if (currentSlideIdx < 0) currentSlideIdx = currentSlides.length - 1;
         if (currentSlideIdx >= currentSlides.length) currentSlideIdx = 0;
         updateCarouselUI();
